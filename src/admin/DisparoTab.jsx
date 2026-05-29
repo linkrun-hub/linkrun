@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import {
   Zap, Plus, Pencil, Trash2, Check, X, ToggleLeft, ToggleRight,
   Clock, Phone, Info, Send, History, RefreshCw, ChevronRight,
-  AlertTriangle, Flame, TrendingUp, Users,
+  AlertTriangle, Flame, TrendingUp, Users, FlaskConical,
 } from 'lucide-react';
 import HelpPanel from './HelpPanel.jsx';
 
@@ -140,6 +140,7 @@ function ContasSection() {
   const [contas, setContas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [modal, setModal] = useState(null); // null | 'new' | conta_obj
+  const [teste, setTeste] = useState(null); // { id, phone, sending, result }
 
   async function load() {
     setLoading(true);
@@ -162,6 +163,24 @@ function ContasSection() {
   }
 
   const saved = () => { setModal(null); load(); };
+
+  async function enviarTeste(c) {
+    if (!c.webhook_url) return;
+    const t = teste?.id === c.id ? teste : { id: c.id, phone: '', sending: false, result: null };
+    if (!t.phone?.trim()) return;
+    setTeste({ ...t, sending: true, result: null });
+    try {
+      const res = await fetch('/api/test-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ webhook_url: c.webhook_url, phone: t.phone, message: 'Teste de conexão LinkRun HUB ✓' }),
+      });
+      const data = await res.json();
+      setTeste(prev => ({ ...prev, sending: false, result: data.ok ? 'ok' : (data.error || `HTTP ${data.status}`) }));
+    } catch (e) {
+      setTeste(prev => ({ ...prev, sending: false, result: e.message }));
+    }
+  }
 
   return (
     <div>
@@ -195,6 +214,14 @@ function ContasSection() {
                   <p className="text-zinc-300 text-xs font-medium">{c.enviados_hoje ?? 0} / {c.limite_diario}</p>
                   <p className="text-zinc-600 text-xs">hoje</p>
                 </div>
+                {c.webhook_url && (
+                  <button
+                    onClick={() => setTeste(t => t?.id === c.id ? null : { id: c.id, phone: '', sending: false, result: null })}
+                    title="Testar webhook"
+                    className="text-zinc-500 hover:text-blue-400 p-1 transition-colors">
+                    <FlaskConical size={14} />
+                  </button>
+                )}
                 <button onClick={() => toggle(c)} className={`transition-colors ${c.ativo ? 'text-neon' : 'text-zinc-600'} hover:opacity-80`}>
                   {c.ativo ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
                 </button>
@@ -202,6 +229,36 @@ function ContasSection() {
                 <button onClick={() => remove(c.id)} className="text-zinc-500 hover:text-red-400 p-1"><Trash2 size={14} /></button>
               </div>
             </div>
+
+            {/* Inline webhook test */}
+            {teste?.id === c.id && (
+              <div className="mt-3 pt-3 border-t border-dark-700/60">
+                <p className="text-xs text-zinc-400 mb-2">Enviar mensagem de teste para:</p>
+                <div className="flex gap-2">
+                  <input
+                    value={teste.phone}
+                    onChange={e => setTeste(t => ({ ...t, phone: e.target.value, result: null }))}
+                    placeholder="5511999998888"
+                    className="flex-1 bg-dark-800 border border-dark-600 rounded-lg px-3 py-1.5 text-sm text-white outline-none focus:border-blue-500/50"
+                  />
+                  <button
+                    onClick={() => enviarTeste(c)}
+                    disabled={teste.sending || !teste.phone?.trim()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs hover:bg-blue-500/20 disabled:opacity-40 transition-colors">
+                    {teste.sending ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
+                    Testar
+                  </button>
+                </div>
+                {teste.result && (
+                  <p className={`text-xs mt-2 flex items-center gap-1 ${teste.result === 'ok' ? 'text-neon' : 'text-red-400'}`}>
+                    {teste.result === 'ok'
+                      ? <><Check size={11} /> Mensagem enviada com sucesso!</>
+                      : <><AlertTriangle size={11} /> Erro: {teste.result}</>
+                    }
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         ))}
         {!loading && !contas.length && (

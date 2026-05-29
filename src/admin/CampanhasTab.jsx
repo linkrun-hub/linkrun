@@ -274,6 +274,113 @@ async function exportarCSV(campanhaId, campanhaNome) {
   URL.revokeObjectURL(url);
 }
 
+/* ─── Modal Testar Envio ─── */
+function ModalTestarEnvio({ campanha, etapas, onClose }) {
+  const [phone, setPhone]     = useState('');
+  const [etapaId, setEtapaId] = useState(etapas[0]?.id || '');
+  const [sending, setSending] = useState(false);
+  const [result, setResult]   = useState(null); // null | 'ok' | string (error)
+
+  async function enviar() {
+    if (!phone.trim() || !etapaId) return;
+    setSending(true);
+    setResult(null);
+    try {
+      // Get first active sending account webhook
+      const { data: accs } = await supabase
+        .from('sending_accounts')
+        .select('webhook_url')
+        .eq('ativo', true)
+        .not('webhook_url', 'is', null)
+        .limit(1);
+
+      if (!accs?.length) { setResult('Nenhuma conta de envio ativa com webhook configurado.'); setSending(false); return; }
+
+      // Get a random active template for the selected step
+      const { data: tpls } = await supabase
+        .from('templates_mensagem')
+        .select('conteudo')
+        .eq('etapa_id', etapaId)
+        .eq('ativo', true);
+
+      if (!tpls?.length) { setResult('Nenhum template ativo nesta etapa.'); setSending(false); return; }
+
+      const tpl = tpls[Math.floor(Math.random() * tpls.length)];
+      const conteudo = tpl.conteudo.replace(/\{\{nome\}\}/gi, 'Teste');
+
+      const res = await fetch('/api/test-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ webhook_url: accs[0].webhook_url, phone, message: conteudo }),
+      });
+      const data = await res.json();
+      setResult(data.ok ? 'ok' : (data.error || `HTTP ${data.status}`));
+    } catch (e) {
+      setResult(e.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+      <div className="bg-dark-900 border border-dark-700 rounded-2xl w-full max-w-md p-6">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h3 className="text-white font-semibold">Testar envio</h3>
+            <p className="text-xs text-zinc-500 mt-0.5">{campanha.nome}</p>
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-zinc-400 mb-1 block">Número de teste (WhatsApp)</label>
+            <input
+              value={phone}
+              onChange={e => { setPhone(e.target.value); setResult(null); }}
+              placeholder="5511999998888"
+              className="w-full bg-dark-800 border border-dark-600 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-blue-500/50"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-zinc-400 mb-1 block">Etapa a testar</label>
+            <select
+              value={etapaId}
+              onChange={e => { setEtapaId(e.target.value); setResult(null); }}
+              className="w-full bg-dark-800 border border-dark-600 rounded-xl px-3 py-2 text-sm text-white outline-none">
+              {etapas.map(e => (
+                <option key={e.id} value={e.id}>Etapa {e.numero}{e.nome ? ` — ${e.nome}` : ''}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {result && (
+          <div className={`mt-4 px-3 py-2 rounded-xl text-xs flex items-start gap-2 ${result === 'ok' ? 'bg-neon/10 border border-neon/20 text-neon' : 'bg-red-500/10 border border-red-500/20 text-red-400'}`}>
+            {result === 'ok'
+              ? <><Check className="w-3.5 h-3.5 shrink-0 mt-0.5" /> Mensagem enviada! Verifique o WhatsApp.</>
+              : <><AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" /> {result}</>
+            }
+          </div>
+        )}
+
+        <div className="flex gap-2 mt-5">
+          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-dark-600 text-zinc-400 text-sm hover:border-zinc-500">Fechar</button>
+          <button
+            onClick={enviar}
+            disabled={sending || !phone.trim() || !etapaId}
+            className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 text-sm hover:bg-blue-500/20 disabled:opacity-40 transition-colors">
+            {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+            {sending ? 'Enviando…' : 'Enviar teste'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Campanha Detail ─── */
 function CampanhaDetail({ id, onBack, onChanged: notifyParent }) {
   const [campanha, setCampanha] = useState(null);
@@ -283,6 +390,7 @@ function CampanhaDetail({ id, onBack, onChanged: notifyParent }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [testeOpen, setTesteOpen] = useState(false);
   const [secOpen, setSecOpen] = useState({ config: false, etapas: true, matricular: false });
   const [enrollResult, setEnrollResult] = useState(null);
   const [enrolling, setEnrolling] = useState(false);
@@ -451,6 +559,15 @@ function CampanhaDetail({ id, onBack, onChanged: notifyParent }) {
         <div className="flex items-center gap-2 shrink-0">
           <StatusBadge status={campanha.status} />
           {saving && <Loader2 className="w-3.5 h-3.5 text-zinc-600 animate-spin" />}
+          {etapas.length > 0 && (
+            <button
+              onClick={() => setTesteOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-500/10 border border-blue-500/30 text-blue-400 hover:bg-blue-500/20 transition-colors cursor-pointer"
+              title="Testar envio de mensagem"
+            >
+              <Zap className="w-3 h-3" /> Testar
+            </button>
+          )}
           <button
             onClick={async () => {
               setExporting(true);
@@ -710,6 +827,10 @@ function CampanhaDetail({ id, onBack, onChanged: notifyParent }) {
           </div>
         )}
       </section>
+
+      {testeOpen && campanha && etapas.length > 0 && (
+        <ModalTestarEnvio campanha={campanha} etapas={etapas} onClose={() => setTesteOpen(false)} />
+      )}
     </div>
   );
 }
