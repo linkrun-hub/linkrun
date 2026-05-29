@@ -3,7 +3,7 @@ import {
   Plus, Upload, Image, Search, Phone, Mail, AtSign,
   Building2, MapPin, ChevronLeft, ChevronRight, MessageSquare,
   Trash2, X, Check, AlertCircle, FileText, Loader2,
-  UserX, Tag, ChevronDown, Users, Megaphone
+  UserX, Tag, ChevronDown, Users, Megaphone, Eye, Clock, Zap, Calendar
 } from 'lucide-react';
 import { supabase } from '../lib/supabase.js';
 
@@ -107,7 +107,7 @@ function TagBadge({ tag }) {
 }
 
 /* ─── LeadCard ─── */
-function LeadCard({ lead, tags, onEtapaChanged, onDelete, onMatricular }) {
+function LeadCard({ lead, tags, onEtapaChanged, onDelete, onMatricular, onDetail }) {
   const wa = (lead.whatsapp || lead.telefone || '').replace(/\D/g, '');
 
   return (
@@ -178,6 +178,13 @@ function LeadCard({ lead, tags, onEtapaChanged, onDelete, onMatricular }) {
               {origemLabel(lead.origem)}
             </span>
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                onClick={() => onDetail(lead)}
+                className="p-1.5 rounded-lg text-zinc-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors cursor-pointer"
+                title="Ver histórico"
+              >
+                <Eye className="w-3.5 h-3.5" />
+              </button>
               {wa && (
                 <a
                   href={`https://wa.me/${wa}`}
@@ -979,6 +986,199 @@ function ModalMatricular({ lead, onClose }) {
   );
 }
 
+/* ─── Modal: Timeline / Histórico do Lead ─── */
+const TIPO_CONFIG = {
+  entrada_botconversa: { emoji: '📲', label: 'Entrada BotConversa' },
+  mensagem_enviada:    { emoji: '✉️',  label: 'Mensagem enviada' },
+  resposta_recebida:   { emoji: '✅',  label: 'Respondeu' },
+  optout:              { emoji: '🚫',  label: 'Optout' },
+  etapa_mudou:         { emoji: '🔄',  label: 'Etapa mudou' },
+  nota:                { emoji: '📝',  label: 'Nota' },
+  bloqueio:            { emoji: '⚠️',  label: 'Bloqueio' },
+  sem_resposta:        { emoji: '🔕',  label: 'Sem resposta' },
+};
+
+const LOG_STATUS_COR = {
+  enviado:      'text-blue-400',
+  aceitou:      'text-neon',
+  optout:       'text-orange-400',
+  bloqueou:     'text-red-400',
+  sem_resposta: 'text-zinc-500',
+  falhou:       'text-red-500',
+};
+
+function fmtDt(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function ModalTimeline({ lead, onClose }) {
+  const [tab, setTab] = useState('atividade');
+  const [interacoes, setInteracoes] = useState([]);
+  const [campanhas, setCampanhas] = useState([]);
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    async function fetchAll() {
+      setLoading(true);
+      const [interRes, lcRes, logRes] = await Promise.all([
+        supabase.from('interacoes_lead')
+          .select('*')
+          .eq('lead_id', lead.id)
+          .order('created_at', { ascending: false })
+          .limit(30),
+        supabase.from('lead_campanhas')
+          .select('*, campanhas(nome, status)')
+          .eq('lead_id', lead.id)
+          .order('matriculado_em', { ascending: false }),
+        supabase.from('log_disparo')
+          .select('*, campanhas(nome)')
+          .eq('lead_id', lead.id)
+          .order('enviado_em', { ascending: false })
+          .limit(30),
+      ]);
+      setInteracoes(interRes.data || []);
+      setCampanhas(lcRes.data || []);
+      setLogs(logRes.data || []);
+      setLoading(false);
+    }
+    fetchAll();
+  }, [lead.id]);
+
+  const tabs = [
+    { id: 'atividade', label: 'Atividade',  count: interacoes.length },
+    { id: 'campanhas', label: 'Campanhas',  count: campanhas.length },
+    { id: 'disparos',  label: 'Disparos',   count: logs.length },
+  ];
+
+  const LC_STATUS = { ativo: 'text-neon', concluido: 'text-zinc-400', optout: 'text-orange-400', pausado: 'text-yellow-400' };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-dark-900 border border-dark-700 rounded-2xl w-full max-w-xl max-h-[88vh] flex flex-col shadow-2xl animate-fade-in-up">
+
+        {/* Header */}
+        <div className="flex items-start gap-3 px-5 py-4 border-b border-dark-700">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold text-dark-900 shrink-0"
+            style={{ backgroundColor: etapaCor(lead.etapa_funil) }}>
+            {initials(lead.nome)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white font-semibold">{lead.nome}</p>
+            <div className="flex flex-wrap items-center gap-2 mt-0.5">
+              <span className="text-xs font-medium px-2 py-0.5 rounded-md"
+                style={{ backgroundColor: etapaCor(lead.etapa_funil) + '22', color: etapaCor(lead.etapa_funil) }}>
+                {etapaLabel(lead.etapa_funil)}
+              </span>
+              {lead.optout && (
+                <span className="text-xs font-medium text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded-md border border-orange-500/20">Optout</span>
+              )}
+              {(lead.whatsapp || lead.telefone) && (
+                <span className="text-xs text-zinc-500">{fmtTel(lead.whatsapp || lead.telefone)}</span>
+              )}
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-dark-700 transition-colors cursor-pointer">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 px-4 pt-3 pb-0 border-b border-dark-700">
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-t-lg transition-colors cursor-pointer -mb-px ${
+                tab === t.id ? 'text-neon border-b-2 border-neon font-medium' : 'text-zinc-500 hover:text-zinc-300'
+              }`}>
+              {t.label}
+              {t.count > 0 && (
+                <span className={`text-xs px-1.5 py-0.5 rounded-full ${tab === t.id ? 'bg-neon/20 text-neon' : 'bg-dark-700 text-zinc-500'}`}>{t.count}</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {loading ? (
+            <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 text-neon animate-spin" /></div>
+          ) : tab === 'atividade' ? (
+            interacoes.length === 0
+              ? <p className="text-zinc-600 text-sm text-center py-10">Nenhuma atividade registrada.</p>
+              : <div className="relative pl-5">
+                  <div className="absolute left-2 top-0 bottom-0 w-px bg-dark-700" />
+                  {interacoes.map((item, i) => {
+                    const info = TIPO_CONFIG[item.tipo] || { emoji: '•', label: item.tipo };
+                    return (
+                      <div key={item.id} className="relative mb-4 last:mb-0">
+                        <div className="absolute -left-3 top-1 w-2 h-2 rounded-full bg-dark-600 border border-dark-500" />
+                        <div className="bg-dark-800 rounded-xl px-3 py-2.5 border border-dark-700">
+                          <div className="flex items-center justify-between gap-2 mb-0.5">
+                            <span className="text-sm font-medium text-white">{info.emoji} {info.label}</span>
+                            <span className="text-xs text-zinc-600 shrink-0">{fmtDt(item.created_at)}</span>
+                          </div>
+                          {item.descricao && <p className="text-xs text-zinc-500">{item.descricao}</p>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+          ) : tab === 'campanhas' ? (
+            campanhas.length === 0
+              ? <p className="text-zinc-600 text-sm text-center py-10">Não matriculado em nenhuma campanha.</p>
+              : <div className="space-y-2">
+                  {campanhas.map(lc => (
+                    <div key={lc.id} className="bg-dark-800 rounded-xl border border-dark-700 px-4 py-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-white text-sm font-medium truncate">{lc.campanhas?.nome || '—'}</p>
+                          <div className="flex items-center gap-3 mt-1">
+                            <span className={`text-xs font-medium ${LC_STATUS[lc.status] || 'text-zinc-500'}`}>{lc.status}</span>
+                            <span className="text-xs text-zinc-600">etapa {lc.etapa_atual}</span>
+                          </div>
+                        </div>
+                        <div className="text-right text-xs text-zinc-500 shrink-0">
+                          <p>Matriculado: {fmtDt(lc.matriculado_em)}</p>
+                          {lc.ultima_mensagem_em && <p>Último envio: {fmtDt(lc.ultima_mensagem_em)}</p>}
+                          {lc.proxima_mensagem_em && lc.status === 'ativo' && (
+                            <p className="text-neon">Próximo: {fmtDt(lc.proxima_mensagem_em)}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+          ) : (
+            logs.length === 0
+              ? <p className="text-zinc-600 text-sm text-center py-10">Nenhum disparo enviado para este lead.</p>
+              : <div className="space-y-2">
+                  {logs.map(l => (
+                    <div key={l.id} className="bg-dark-800 rounded-xl border border-dark-700 px-4 py-3">
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-medium ${LOG_STATUS_COR[l.status] || 'text-zinc-400'}`}>{l.status}</span>
+                          <span className="text-xs text-zinc-600">{l.campanhas?.nome || '—'}</span>
+                        </div>
+                        <span className="text-xs text-zinc-600 shrink-0">{fmtDt(l.enviado_em)}</span>
+                      </div>
+                      {l.conteudo_enviado && (
+                        <p className="text-xs text-zinc-500 italic">"{l.conteudo_enviado.slice(0, 100)}{l.conteudo_enviado.length > 100 ? '…' : ''}"</p>
+                      )}
+                      {l.respondeu_em && (
+                        <p className="text-xs text-neon mt-1">↩ Respondeu em {fmtDt(l.respondeu_em)}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── LeadsTab principal ─── */
 export default function LeadsTab() {
   const [leads, setLeads] = useState([]);
@@ -995,6 +1195,7 @@ export default function LeadsTab() {
 
   const [modal, setModal] = useState(null); // null | 'manual' | 'csv' | 'ocr'
   const [leadParaMatricular, setLeadParaMatricular] = useState(null);
+  const [leadDetalhado, setLeadDetalhado] = useState(null);
 
   /* Stats por etapa */
   const [stats, setStats] = useState({});
@@ -1185,6 +1386,7 @@ export default function LeadsTab() {
               onEtapaChanged={() => { fetchLeads(); fetchStats(); }}
               onDelete={handleDelete}
               onMatricular={setLeadParaMatricular}
+              onDetail={setLeadDetalhado}
             />
           ))}
         </div>
@@ -1226,6 +1428,9 @@ export default function LeadsTab() {
       )}
       {leadParaMatricular && (
         <ModalMatricular lead={leadParaMatricular} onClose={() => setLeadParaMatricular(null)} />
+      )}
+      {leadDetalhado && (
+        <ModalTimeline lead={leadDetalhado} onClose={() => setLeadDetalhado(null)} />
       )}
     </div>
   );
