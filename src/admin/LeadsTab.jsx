@@ -3,7 +3,7 @@ import {
   Plus, Upload, Image, Search, Phone, Mail, AtSign,
   Building2, MapPin, ChevronLeft, ChevronRight, MessageSquare,
   Trash2, X, Check, AlertCircle, FileText, Loader2,
-  UserX, Tag, ChevronDown, Users
+  UserX, Tag, ChevronDown, Users, Megaphone
 } from 'lucide-react';
 import { supabase } from '../lib/supabase.js';
 
@@ -107,7 +107,7 @@ function TagBadge({ tag }) {
 }
 
 /* ─── LeadCard ─── */
-function LeadCard({ lead, tags, onEtapaChanged, onDelete }) {
+function LeadCard({ lead, tags, onEtapaChanged, onDelete, onMatricular }) {
   const wa = (lead.whatsapp || lead.telefone || '').replace(/\D/g, '');
 
   return (
@@ -188,6 +188,13 @@ function LeadCard({ lead, tags, onEtapaChanged, onDelete }) {
                   <MessageSquare className="w-3.5 h-3.5" />
                 </a>
               )}
+              <button
+                onClick={() => onMatricular(lead)}
+                className="p-1.5 rounded-lg text-zinc-500 hover:text-neon hover:bg-neon/10 transition-colors cursor-pointer"
+                title="Matricular em campanha"
+              >
+                <Megaphone className="w-3.5 h-3.5" />
+              </button>
               {lead.optout && <UserX className="w-3.5 h-3.5 text-red-400" title="Optout" />}
               <button
                 onClick={() => onDelete(lead.id)}
@@ -877,6 +884,101 @@ function ModalOCR({ tags, onClose, onSaved }) {
   );
 }
 
+/* ─── Modal: Matricular em Campanha ─── */
+function ModalMatricular({ lead, onClose }) {
+  const [campanhas, setCampanhas] = useState([]);
+  const [matriculados, setMatriculados] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(null);
+  const [done, setDone] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const [{ data: camps }, { data: lc }] = await Promise.all([
+        supabase.from('campanhas').select('id, nome, status').order('created_at', { ascending: false }),
+        supabase.from('lead_campanhas').select('campanha_id').eq('lead_id', lead.id),
+      ]);
+      setCampanhas(camps || []);
+      setMatriculados((lc || []).map(r => r.campanha_id));
+      setLoading(false);
+    };
+    fetchData();
+  }, [lead.id]);
+
+  const handleMatricular = async (campanha) => {
+    if (matriculados.includes(campanha.id) || done.includes(campanha.id)) return;
+    setSaving(campanha.id);
+    const { data: etapas } = await supabase.from('campanha_etapas')
+      .select('*').eq('campanha_id', campanha.id).order('numero').limit(1);
+    const step1 = etapas?.[0];
+    const proxima = new Date();
+    if (step1?.delay_dias) proxima.setDate(proxima.getDate() + step1.delay_dias);
+
+    await supabase.from('lead_campanhas').insert({
+      lead_id: lead.id, campanha_id: campanha.id,
+      etapa_atual: 1, status: 'ativo',
+      proxima_mensagem_em: proxima.toISOString(),
+      matriculado_em: new Date().toISOString(),
+    });
+    setSaving(null);
+    setDone(d => [...d, campanha.id]);
+  };
+
+  const STATUS_COR = { ativa: '#10b981', pausada: '#f59e0b', rascunho: '#64748b', finalizada: '#6b7280' };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-dark-900 border border-dark-700 rounded-2xl w-full max-w-sm shadow-2xl animate-fade-in-up">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-dark-700">
+          <div>
+            <h3 className="font-semibold text-white text-sm">Matricular em Campanha</h3>
+            <p className="text-xs text-zinc-500 mt-0.5">{lead.nome}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-dark-700 transition-colors cursor-pointer">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-3 space-y-1.5 max-h-72 overflow-y-auto">
+          {loading ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 text-neon animate-spin" /></div>
+          ) : campanhas.length === 0 ? (
+            <p className="text-xs text-zinc-500 text-center py-6">Nenhuma campanha criada ainda.</p>
+          ) : (
+            campanhas.map(c => {
+              const jaMatriculado = matriculados.includes(c.id);
+              const acabouDeMatricular = done.includes(c.id);
+              const isSaving = saving === c.id;
+              const cor = STATUS_COR[c.status] || '#64748b';
+              return (
+                <button key={c.id}
+                  onClick={() => handleMatricular(c)}
+                  disabled={jaMatriculado || acabouDeMatricular || isSaving}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm transition-all cursor-pointer
+                    ${(jaMatriculado || acabouDeMatricular) ? 'bg-neon/5 border border-neon/20' : 'bg-dark-800 border border-dark-700 hover:border-dark-600'}
+                    disabled:cursor-default`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cor }} />
+                    <span className={`truncate ${jaMatriculado || acabouDeMatricular ? 'text-neon' : 'text-zinc-300'}`}>{c.nome}</span>
+                  </div>
+                  {isSaving && <Loader2 className="w-3.5 h-3.5 text-neon animate-spin shrink-0" />}
+                  {(jaMatriculado || acabouDeMatricular) && <Check className="w-3.5 h-3.5 text-neon shrink-0" />}
+                </button>
+              );
+            })
+          )}
+        </div>
+        <div className="px-5 py-3 border-t border-dark-700">
+          <button onClick={onClose} className="w-full py-2 rounded-xl text-sm text-zinc-400 hover:text-white hover:bg-dark-700 transition-colors cursor-pointer">
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── LeadsTab principal ─── */
 export default function LeadsTab() {
   const [leads, setLeads] = useState([]);
@@ -892,6 +994,7 @@ export default function LeadsTab() {
   const [filtroOrigem, setFiltroOrigem] = useState('');
 
   const [modal, setModal] = useState(null); // null | 'manual' | 'csv' | 'ocr'
+  const [leadParaMatricular, setLeadParaMatricular] = useState(null);
 
   /* Stats por etapa */
   const [stats, setStats] = useState({});
@@ -1081,6 +1184,7 @@ export default function LeadsTab() {
               tags={tagsMap[lead.id] || []}
               onEtapaChanged={() => { fetchLeads(); fetchStats(); }}
               onDelete={handleDelete}
+              onMatricular={setLeadParaMatricular}
             />
           ))}
         </div>
@@ -1119,6 +1223,9 @@ export default function LeadsTab() {
       )}
       {modal === 'ocr' && (
         <ModalOCR tags={allTags} onClose={() => setModal(null)} onSaved={() => { fetchLeads(); fetchStats(); }} />
+      )}
+      {leadParaMatricular && (
+        <ModalMatricular lead={leadParaMatricular} onClose={() => setLeadParaMatricular(null)} />
       )}
     </div>
   );
