@@ -3,7 +3,7 @@ import {
   Plus, ChevronLeft, Megaphone, Play, Pause, Trash2, Settings,
   Clock, CalendarDays, Tag, Users, Check, X, ChevronDown, ChevronUp,
   Loader2, AlertCircle, GripVertical, Copy, Zap, MessageSquare,
-  ToggleLeft, ToggleRight, Info
+  ToggleLeft, ToggleRight, Info, Download
 } from 'lucide-react';
 import { supabase } from '../lib/supabase.js';
 
@@ -228,6 +228,51 @@ function EtapaRow({ etapa, index, isFirst, onDelete, onChanged }) {
   );
 }
 
+async function exportarCSV(campanhaId, campanhaNome) {
+  const [{ data: lcs }, { data: logs }] = await Promise.all([
+    supabase.from('lead_campanhas')
+      .select('*, leads(nome, whatsapp, email, etapa_funil)')
+      .eq('campanha_id', campanhaId),
+    supabase.from('log_disparo')
+      .select('lead_id, status')
+      .eq('campanha_id', campanhaId),
+  ]);
+
+  const logsByLead = {};
+  (logs || []).forEach(l => {
+    if (!logsByLead[l.lead_id]) logsByLead[l.lead_id] = [];
+    logsByLead[l.lead_id].push(l.status);
+  });
+
+  const headers = ['Nome','WhatsApp','Email','Etapa Funil','Status Campanha','Etapa Atual','Matriculado Em','Ultima Mensagem','Disparos','Aceitou','Optout','Bloqueou'];
+  const rows = (lcs || []).map(lc => {
+    const ls = logsByLead[lc.lead_id] || [];
+    return [
+      lc.leads?.nome         || '',
+      lc.leads?.whatsapp     || '',
+      lc.leads?.email        || '',
+      lc.leads?.etapa_funil  || '',
+      lc.status,
+      lc.etapa_atual,
+      lc.matriculado_em      ? new Date(lc.matriculado_em).toLocaleString('pt-BR')      : '',
+      lc.ultima_mensagem_em  ? new Date(lc.ultima_mensagem_em).toLocaleString('pt-BR')  : '',
+      ls.length,
+      ls.filter(s => s === 'aceitou').length,
+      ls.filter(s => s === 'optout').length,
+      ls.filter(s => s === 'bloqueou').length,
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';');
+  });
+
+  const csv = '﻿' + [headers.map(h => `"${h}"`).join(';'), ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `campanha_${campanhaNome.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 /* ─── Campanha Detail ─── */
 function CampanhaDetail({ id, onBack, onChanged: notifyParent }) {
   const [campanha, setCampanha] = useState(null);
@@ -236,6 +281,7 @@ function CampanhaDetail({ id, onBack, onChanged: notifyParent }) {
   const [campanhaTagIds, setCampanhaTagIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [secOpen, setSecOpen] = useState({ config: false, etapas: true, matricular: false });
   const [enrollResult, setEnrollResult] = useState(null);
   const [enrolling, setEnrolling] = useState(false);
@@ -404,6 +450,19 @@ function CampanhaDetail({ id, onBack, onChanged: notifyParent }) {
         <div className="flex items-center gap-2 shrink-0">
           <StatusBadge status={campanha.status} />
           {saving && <Loader2 className="w-3.5 h-3.5 text-zinc-600 animate-spin" />}
+          <button
+            onClick={async () => {
+              setExporting(true);
+              await exportarCSV(id, campanha.nome);
+              setExporting(false);
+            }}
+            disabled={exporting}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-dark-700 border border-dark-600 text-zinc-400 hover:text-white hover:border-dark-500 transition-colors cursor-pointer disabled:opacity-50"
+            title="Exportar leads como CSV"
+          >
+            {exporting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+            CSV
+          </button>
           <button onClick={toggleStatus}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
               isAtiva ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20' : 'bg-neon/10 text-neon hover:bg-neon/20'

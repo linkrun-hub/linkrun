@@ -428,6 +428,45 @@ function SetupSection() {
 
 export default function DisparoTab() {
   const [section, setSection] = useState('contas');
+  const [alertas, setAlertas] = useState([]);
+  const [dismissed, setDismissed] = useState(new Set());
+
+  useEffect(() => {
+    async function loadAlertas() {
+      const { data: pausadas } = await supabase
+        .from('campanhas')
+        .select('id, nome, pause_se_bloqueio_pct')
+        .eq('status', 'pausada');
+
+      if (!pausadas?.length) return;
+
+      const withStats = await Promise.all(
+        pausadas.map(async (c) => {
+          const { data: logs } = await supabase
+            .from('log_disparo')
+            .select('status')
+            .eq('campanha_id', c.id)
+            .order('enviado_em', { ascending: false })
+            .limit(100);
+          const total     = logs?.length || 0;
+          const bloqueios = (logs || []).filter(l => l.status === 'bloqueou').length;
+          const pct       = total > 0 ? Math.round((bloqueios / total) * 100) : 0;
+          return { ...c, bloqueios, total_logs: total, pct };
+        })
+      );
+
+      // Only show campaigns with actual block events
+      setAlertas(withStats.filter(a => a.bloqueios > 0));
+    }
+    loadAlertas();
+  }, []);
+
+  async function reativar(campanha) {
+    await supabase.from('campanhas').update({ status: 'ativa' }).eq('id', campanha.id);
+    setDismissed(d => new Set([...d, campanha.id]));
+  }
+
+  const alertasVisiveis = alertas.filter(a => !dismissed.has(a.id));
 
   return (
     <div className="animate-fade-in-up">
@@ -440,6 +479,36 @@ export default function DisparoTab() {
           <p className="text-zinc-500 text-xs">Contas de envio, fila ativa e histórico de disparos</p>
         </div>
       </div>
+
+      {/* Block alerts */}
+      {alertasVisiveis.map(a => (
+        <div key={a.id} className="flex items-start gap-3 bg-red-500/10 border border-red-500/25 rounded-2xl px-4 py-3 mb-4">
+          <AlertTriangle size={16} className="text-red-400 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-red-300 text-sm font-medium">
+              Campanha pausada por bloqueio: <span className="text-white">{a.nome}</span>
+            </p>
+            <p className="text-zinc-500 text-xs mt-0.5">
+              {a.bloqueios} bloqueio{a.bloqueios !== 1 ? 's' : ''} nos últimos {a.total_logs} disparos
+              ({a.pct}% — limite configurado: {a.pause_se_bloqueio_pct || 5}%)
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => reativar(a)}
+              className="px-3 py-1.5 rounded-xl text-xs font-medium bg-neon/10 border border-neon/30 text-neon hover:bg-neon/20 transition-colors"
+            >
+              Reativar
+            </button>
+            <button
+              onClick={() => setDismissed(d => new Set([...d, a.id]))}
+              className="text-zinc-600 hover:text-zinc-400 transition-colors"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      ))}
 
       {/* Section tabs */}
       <div className="flex gap-1 p-1 bg-dark-900 border border-dark-700 rounded-2xl mb-6 overflow-x-auto">

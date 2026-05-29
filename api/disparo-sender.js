@@ -82,6 +82,13 @@ function randomDelayMs(minSec, maxSec) {
   return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
 }
 
+// Warmup: cada dia ativo aumenta 20 envios, até o limite configurado
+function warmupLimit(acc) {
+  if (!acc.modo_warmup) return acc.limite_diario;
+  const step = 20;
+  return Math.min((acc.warmup_dia || 1) * step, acc.limite_diario);
+}
+
 export default async function handler(req) {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
 
@@ -120,16 +127,22 @@ async function run(req) {
 
   for (const acc of accounts) {
     if (acc.ultimo_reset !== today) {
-      await dbPatch('sending_accounts', `id=eq.${acc.id}`, { enviados_hoje: 0, ultimo_reset: today });
+      const patch = { enviados_hoje: 0, ultimo_reset: today };
+      // Advance warmup_dia each new day while in warmup mode
+      if (acc.modo_warmup) {
+        patch.warmup_dia = (acc.warmup_dia || 1) + 1;
+        acc.warmup_dia = patch.warmup_dia;
+      }
+      await dbPatch('sending_accounts', `id=eq.${acc.id}`, patch);
       acc.enviados_hoje = 0;
     }
   }
 
   // Pick sending account with most remaining capacity that has a webhook_url configured
-  const available = accounts.filter(a => a.webhook_url && a.enviados_hoje < a.limite_diario);
+  const available = accounts.filter(a => a.webhook_url && a.enviados_hoje < warmupLimit(a));
   if (!available.length) return respond({ ok: true, skipped: 'nenhuma conta com capacidade disponível hoje' });
 
-  available.sort((a, b) => (b.limite_diario - b.enviados_hoje) - (a.limite_diario - a.enviados_hoje));
+  available.sort((a, b) => (warmupLimit(b) - b.enviados_hoje) - (warmupLimit(a) - a.enviados_hoje));
   const account = available[0];
 
   // Get all active campaigns
@@ -139,7 +152,7 @@ async function run(req) {
   const results = [];
 
   for (const campanha of campanhas) {
-    if (account.enviados_hoje >= account.limite_diario) break;
+    if (account.enviados_hoje >= warmupLimit(account)) break;
 
     // Auto-pause if block rate exceeds threshold (min 20 samples)
     const threshold = Number(campanha.pause_se_bloqueio_pct) || 5.0;
