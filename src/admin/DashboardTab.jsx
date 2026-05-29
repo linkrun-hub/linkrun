@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Users, Zap, TrendingUp, Megaphone, RefreshCw } from 'lucide-react';
+import HelpPanel from './HelpPanel.jsx';
 
 const ETAPAS = [
   { value: 'frio',      label: 'Frio',      cor: '#64748b' },
@@ -218,6 +219,15 @@ export default function DashboardTab() {
           Atualizar
         </button>
       </div>
+
+      <HelpPanel tabKey="dashboard" items={[
+        { icon: '📊', title: 'Métricas Principais', desc: 'KPIs no topo: total de leads, campanhas ativas, disparos nos últimos 30 dias e taxa de aceitação (respostas ÷ disparos).' },
+        { icon: '🔵', title: 'Funil de Leads', desc: 'Barras horizontais mostrando quantos leads estão em cada etapa: Frio → Morno → Quente → Assinante → Churn.' },
+        { icon: '🏷️', title: 'Leads por Produto', desc: 'Distribuição dos leads pelas tags de produto (Revenda Profit, LogProfit etc.). Ajuda a ver qual produto tem mais interesse.' },
+        { icon: '📈', title: 'Performance de Campanhas', desc: 'Tabela com taxa de aceitação por campanha. Verde ≥15%, amarelo ≥8%, vermelho abaixo — identifica campanhas que precisam de ajuste.' },
+        { icon: '⚡', title: 'Disparos (30 dias)', desc: 'Volume total enviado no mês, dividido por status: enviado, aceitou, bloqueou, optout e falhou.' },
+        { icon: '🕐', title: 'Atividade Recente', desc: 'Últimas 8 interações do sistema (respostas, entradas, optouts). Use o botão Atualizar para recarregar tudo.' },
+      ]} />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

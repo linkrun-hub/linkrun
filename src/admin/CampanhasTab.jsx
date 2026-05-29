@@ -6,6 +6,7 @@ import {
   ToggleLeft, ToggleRight, Info, Download
 } from 'lucide-react';
 import { supabase } from '../lib/supabase.js';
+import HelpPanel from './HelpPanel.jsx';
 
 /* ─── Constants ─── */
 const STATUS_META = {
@@ -810,6 +811,17 @@ export default function CampanhasTab() {
           <Plus className="w-4 h-4" /> Nova Campanha
         </button>
       </div>
+
+      <HelpPanel tabKey="campanhas" items={[
+        { icon: '📣', title: 'Criar Campanha', desc: 'Defina nome, janela de horário (ex: 08:00–19:00), dias da semana e delays entre mensagens. A campanha começa como Rascunho.' },
+        { icon: '📝', title: 'Etapas & Mensagens', desc: 'Cada campanha tem etapas numeradas. Em cada etapa, adicione variações de mensagem — o sistema sorteia uma aleatoriamente no envio.' },
+        { icon: '🏷️', title: 'Tags Alvo', desc: 'Vincule tags de produto à campanha para filtrar quais leads podem ser matriculados. Uma campanha pode ter múltiplas tags.' },
+        { icon: '⏰', title: 'Janela de Horário', desc: 'Mensagens só são enviadas dentro da janela configurada (horário de Brasília). Fora do horário, o envio é adiado automaticamente.' },
+        { icon: '👥', title: 'Matricular Leads', desc: 'Na aba Leads, clique no ícone de campanha de um lead para matriculá-lo. Ele entrará na fila da etapa 1 imediatamente.' },
+        { icon: '⬇️', title: 'Exportar CSV', desc: 'No detalhe da campanha, clique em CSV para baixar todos os leads matriculados com status, disparos, aceitações e optouts.' },
+        { icon: '🛡️', title: 'Anti-Bloqueio', desc: 'Se a taxa de bloqueio superar o limite (padrão 5%), a campanha é pausada automaticamente. Você recebe um alerta na aba Disparo.' },
+        { icon: '⏱️', title: 'Delays', desc: 'Configure delay mínimo e máximo em segundos entre cada envio. Um valor aleatório dentro do intervalo é sorteado para cada mensagem.' },
+      ]} />
 
       {loading ? (
         <div className="flex items-center justify-center py-16">

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Pencil, Trash2, Check, X, Tag } from 'lucide-react';
 import { supabase } from '../lib/supabase.js';
+import HelpPanel from './HelpPanel.jsx';
 
 const CORES_PRESET = [
   '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6',
@@ -209,6 +210,13 @@ export default function ConfigTab() {
         <h2 className="text-xl font-bold text-white">Configurações</h2>
         <p className="text-sm text-zinc-500 mt-1">Gerencie tags de produtos e segmentações personalizadas.</p>
       </div>
+
+      <HelpPanel tabKey="config" items={[
+        { icon: '🏷️', title: 'Tags de Produto', desc: 'Tags fixas para cada produto (Revenda Profit, LogProfit, Delicite, UAIROX). Usadas para segmentar leads e campanhas.' },
+        { icon: '✏️', title: 'Tags Customizadas', desc: 'Crie tags livres para segmentações específicas: região, perfil, interesse, origem especial etc.' },
+        { icon: '🎨', title: 'Cores', desc: 'Cada tag tem uma cor que aparece nos cards de leads e filtros. Escolha entre as cores predefinidas ou use um código hex.' },
+        { icon: '➕', title: 'Nova Tag', desc: 'Clique em "+ Nova Tag" para criar. Defina o nome e escolha a cor. Tags customizadas podem ser deletadas; tags de produto não.' },
+      ]} />
 
       {loading ? (
         <div className="text-zinc-500 text-sm">Carregando...</div>

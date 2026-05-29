@@ -6,6 +6,7 @@ import {
   UserX, Tag, ChevronDown, Users, Megaphone, Eye, Clock, Zap, Calendar
 } from 'lucide-react';
 import { supabase } from '../lib/supabase.js';
+import HelpPanel from './HelpPanel.jsx';
 
 const PAGE_SIZE = 50;
 
@@ -1299,6 +1300,17 @@ export default function LeadsTab() {
           </button>
         </div>
       </div>
+
+      <HelpPanel tabKey="leads" items={[
+        { icon: '➕', title: 'Novo Lead', desc: 'Cadastro manual com nome, telefone, WhatsApp, email, Instagram, CNPJ, cidade e notas. Selecione as tags de produto e a etapa do funil.' },
+        { icon: '📄', title: 'Importar Planilha', desc: 'Importa CSV/Excel do DataProspect. As colunas são mapeadas automaticamente. Duplicatas por WhatsApp são ignoradas automaticamente.' },
+        { icon: '🤖', title: 'Print IA (OCR)', desc: 'Cole ou carregue um print com contatos (Ctrl+V ou botão). A IA extrai nome, telefone e e-mail. Revise antes de salvar.' },
+        { icon: '📲', title: 'BotConversa', desc: 'Leads gerados pelo BotConversa entram automaticamente via webhook com origem="botconversa". Não requer ação manual.' },
+        { icon: '🔵', title: 'Etapas do Funil', desc: 'Clique em Frio, Morno, Quente, Assinante ou Churn para filtrar. Os números mostram quantos leads estão em cada etapa.' },
+        { icon: '👁️', title: 'Histórico do Lead', desc: 'Clique no ícone de olho em qualquer lead para ver o histórico completo: atividades, campanhas matriculadas e disparos recebidos.' },
+        { icon: '📣', title: 'Matricular em Campanha', desc: 'No card do lead, clique no ícone de campanha para matriculá-lo em uma sequência de mensagens automáticas.' },
+        { icon: '🔍', title: 'Filtros', desc: 'Busque por nome, telefone ou e-mail. Filtre por etapa do funil, tag de produto ou origem (Manual, Planilha, Print IA, Meta Ads etc.).' },
+      ]} />
 
       {/* Stats por etapa */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">

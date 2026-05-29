@@ -5,6 +5,7 @@ import {
   Clock, Phone, Info, Send, History, RefreshCw, ChevronRight,
   AlertTriangle, Flame, TrendingUp, Users,
 } from 'lucide-react';
+import HelpPanel from './HelpPanel.jsx';
 
 const SECTIONS = [
   { id: 'contas',    label: 'Contas de Envio', icon: Phone },
@@ -479,6 +480,15 @@ export default function DisparoTab() {
           <p className="text-zinc-500 text-xs">Contas de envio, fila ativa e histórico de disparos</p>
         </div>
       </div>
+
+      <HelpPanel tabKey="disparo" items={[
+        { icon: '📱', title: 'Contas de Envio', desc: 'Cadastre os números de WhatsApp usados para enviar. Configure o webhook do BotConversa, limite diário e modo warmup.' },
+        { icon: '🔥', title: 'Warmup', desc: 'Ative o modo warmup para aumentar gradualmente o volume diário (+20 por dia). Evita bloqueios em contas novas.' },
+        { icon: '📋', title: 'Fila Ativa', desc: 'Leads aguardando o próximo disparo. Mostra campanha, etapa atual e horário agendado para o próximo envio.' },
+        { icon: '📜', title: 'Histórico', desc: 'Log completo de todos os disparos realizados. Filtre por status: enviado, aceitou, bloqueou, optout ou falhou.' },
+        { icon: '🚨', title: 'Alerta de Bloqueio', desc: 'Se uma campanha for pausada por alta taxa de bloqueio, um banner vermelho aparece aqui. Você pode reativar a campanha após revisar.' },
+        { icon: '🔗', title: 'Webhook de Resposta', desc: 'Configure no BotConversa o webhook /api/disparo-resposta para registrar automaticamente respostas, optouts e bloqueios.' },
+      ]} />
 
       {/* Block alerts */}
       {alertasVisiveis.map(a => (
